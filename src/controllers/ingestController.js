@@ -18,7 +18,7 @@ async function ingest(req, res, next) {
     const { chunks, discarded } = await extractAndChunk(req.file.buffer);
 
     // Save source document
-    const sourceDoc = await SourceDocument.create({
+    await SourceDocument.create({
       source_id: sourceId,
       title: req.file.originalname,
       subject,

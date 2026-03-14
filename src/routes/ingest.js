@@ -6,6 +6,7 @@ const { ingest } = require('../controllers/ingestController');
 
 const upload = multer({
   storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB max
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf') cb(null, true);
     else cb(new Error('Only PDF files are accepted'));

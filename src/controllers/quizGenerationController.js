@@ -14,14 +14,20 @@ async function generateQuiz(req, res, next) {
       return next(err);
     }
 
-    // ISSUE-03: fire all LLM calls in parallel instead of sequentially
-    const results = await Promise.all(
-      chunks.map(chunk =>
-        generateQuestionsForChunk(chunk.text)
-          .then(questions => ({ chunk, questions }))
-          .catch(() => ({ chunk, questions: [] }))
-      )
-    );
+    // Process chunks in batches of 3 to avoid Groq rate limits
+    const BATCH_SIZE = 3;
+    const results = [];
+    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+      const batch = chunks.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(chunk =>
+          generateQuestionsForChunk(chunk.text)
+            .then(questions => ({ chunk, questions }))
+            .catch(() => ({ chunk, questions: [] }))
+        )
+      );
+      results.push(...batchResults);
+    }
 
     let totalGenerated = 0;
     let totalDuplicates = 0;
