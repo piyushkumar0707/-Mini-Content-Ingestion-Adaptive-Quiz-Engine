@@ -44,7 +44,7 @@ async function generateQuiz(req, res, next) {
 
     for (const { chunk, questions } of results) {
       const valid = questions
-        .filter(q => q.question && q.type && q.answer)
+        .filter(q => q.question && q.type && q.answer && q.question.length >= 10)
         .map(q => ({
           question_id: generateQuestionId(),
           question: q.question,
