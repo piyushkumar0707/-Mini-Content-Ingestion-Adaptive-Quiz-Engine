@@ -9,7 +9,7 @@ A Node.js + Express + MongoDB backend that ingests educational PDFs, uses an LLM
 ```
 PDF Upload → /ingest → pdfService (extract + chunk) → MongoDB (SourceDocument + ContentChunk)
                                                                ↓
-/generate-quiz → llmService (GPT-4o-mini) → MongoDB (QuizQuestion)
+/generate-quiz → llmService (Groq llama-3.3-70b-versatile) → MongoDB (QuizQuestion)
                                                                ↓
 /quiz (GET) ← filtered by topic / difficulty / student session
                                                                ↓
@@ -228,7 +228,7 @@ curl http://localhost:3000/student/S001/difficulty
 ### Prerequisites
 - [Node.js](https://nodejs.org/) v18+
 - [MongoDB](https://www.mongodb.com/try/download/community) running locally (or a MongoDB Atlas URI)
-- An OpenAI API key (for quiz generation)
+- A [Groq API key](https://console.groq.com) (free tier available)
 
 ### 1. Install MongoDB
 Download and start MongoDB Community Edition, or use [MongoDB Atlas](https://www.mongodb.com/atlas).
@@ -251,7 +251,7 @@ Edit `.env`:
 ```
 PORT=3000
 MONGO_URI=mongodb://localhost:27017/peblo_quiz
-LLM_API_KEY=sk-...your-openai-key...
+GROQ_API_KEY=gsk_...your-groq-key...
 ```
 
 ### 4. Start the server
