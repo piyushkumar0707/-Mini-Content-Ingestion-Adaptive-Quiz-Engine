@@ -22,24 +22,30 @@ Rules:
 - Return ONLY the JSON array, no explanation, no markdown fences.`;
 
 async function generateQuestionsForChunk(chunkText) {
-  const response = await client.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: `Generate quiz questions from this educational content:\n\n${chunkText}` }
-    ],
-    temperature: 0.7,
-    max_tokens: 1500
-  });
-
-  const raw = response.choices[0].message.content.trim();
-
   try {
-    // Strip markdown code fences if LLM adds them anyway
-    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-    return JSON.parse(cleaned);
-  } catch (e) {
-    console.error('[llmService] Failed to parse LLM response as JSON:', raw.slice(0, 200));
+    const response = await client.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: `Generate quiz questions from this educational content:\n\n${chunkText}` }
+      ],
+      temperature: 0.7,
+      max_tokens: 1500
+    });
+
+    const raw = response.choices[0].message.content.trim();
+
+    try {
+      // Strip markdown code fences if LLM adds them anyway
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+      return JSON.parse(cleaned);
+    } catch (e) {
+      console.error('[llmService] Failed to parse LLM response as JSON:', raw.slice(0, 200));
+      return [];
+    }
+  } catch (err) {
+    // ISSUE-06: catch API failures (rate limit, downtime) so other chunks still process
+    console.error('[llmService] API call failed:', err.message);
     return [];
   }
 }

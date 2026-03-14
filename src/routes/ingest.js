@@ -13,7 +13,7 @@ const upload = multer({
 });
 
 router.post('/', upload.single('file'), [
-  body('grade').notEmpty().withMessage('grade is required'),
+  body('grade').notEmpty().isInt({ min: 1, max: 12 }).withMessage('grade must be an integer between 1 and 12'),
   body('subject').notEmpty().withMessage('subject is required'),
   body('topic').notEmpty().withMessage('topic is required')
 ], validate, ingest);

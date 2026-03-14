@@ -1,7 +1,5 @@
-let srcCounter = 1;
-
 function generateSourceId() {
-  return `SRC_${String(srcCounter++).padStart(3, '0')}`;
+  return `SRC_${Date.now()}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
 
 function generateChunkId(sourceId, index) {

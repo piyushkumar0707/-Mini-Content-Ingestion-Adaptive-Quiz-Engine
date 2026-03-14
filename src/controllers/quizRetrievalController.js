@@ -15,25 +15,17 @@ async function getQuiz(req, res, next) {
 
     if (resolvedDifficulty) filter.difficulty = resolvedDifficulty;
 
-    // Topic filter: search within chunk_id or use a separate lookup
-    // We store topic per chunk but not on QuizQuestion directly.
-    // We'll do a lookup via ContentChunk if topic is requested.
+    // ISSUE-05: topic is now stored directly on QuizQuestion — single query, no join
     if (topic) {
-      const ContentChunk = require('../models/ContentChunk');
-      const matchingChunks = await ContentChunk.find({
-        topic: { $regex: topic, $options: 'i' }
-      }).select('chunk_id');
-      const chunkIds = matchingChunks.map(c => c.chunk_id);
-      filter.source_chunk_id = { $in: chunkIds };
+      filter.topic = { $regex: topic, $options: 'i' };
     }
 
     const maxResults = Math.min(parseInt(limit) || 10, 100);
     const questions = await QuizQuestion.find(filter).limit(maxResults);
 
+    // ISSUE-07: empty results = 200 with empty array, not 404
     if (!questions.length) {
-      const err = new Error('No questions found matching the given filters');
-      err.status = 404;
-      return next(err);
+      return res.json({ count: 0, questions: [] });
     }
 
     res.json({ count: questions.length, questions });

@@ -6,6 +6,13 @@ const schema = new mongoose.Schema({
   options: [String],
   answer: { type: String, required: true },
   difficulty: { type: String, enum: ['easy', 'medium', 'hard'], default: 'easy' },
-  source_chunk_id: String
+  source_chunk_id: String,
+  topic: String,
+  subject: String,
+  grade: Number
 });
+
+// Compound unique index — prevents duplicate questions per chunk (ISSUE-02)
+schema.index({ question: 1, source_chunk_id: 1 }, { unique: true });
+
 module.exports = mongoose.model('QuizQuestion', schema);
