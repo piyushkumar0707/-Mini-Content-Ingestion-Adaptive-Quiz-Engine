@@ -44,7 +44,20 @@ async function generateQuiz(req, res, next) {
 
     for (const { chunk, questions } of results) {
       const valid = questions
-        .filter(q => q.question && q.type && q.answer && q.question.length >= 10)
+        .filter(q => {
+          if (!q.question || !q.type || !q.answer) return false;
+          if (q.question.length < 10) return false;
+          // MCQ must have exactly 4 options and answer must be one of them
+          if (q.type === 'MCQ') {
+            if (!Array.isArray(q.options) || q.options.length !== 4) return false;
+            if (!q.options.includes(q.answer)) return false;
+          }
+          // TrueFalse answer must be "True" or "False"
+          if (q.type === 'TrueFalse') {
+            if (!['True', 'False'].includes(q.answer)) return false;
+          }
+          return true;
+        })
         .map(q => ({
           question_id: generateQuestionId(),
           question: q.question,
