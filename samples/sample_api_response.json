@@ -1,0 +1,39 @@
+{
+  "POST /ingest": {
+    "source_id": "SRC_001",
+    "title": "peblo_pdf_grade1_math_numbers.pdf",
+    "chunks_saved": 14,
+    "chunks_discarded": 3
+  },
+  "POST /generate-quiz": {
+    "source_id": "SRC_001",
+    "questions_generated": 42,
+    "duplicates_skipped": 0
+  },
+  "GET /quiz?topic=shapes&difficulty=easy": {
+    "count": 5,
+    "questions": [
+      {
+        "question_id": "Q_1700000000000_ABCDE",
+        "question": "How many sides does a triangle have?",
+        "type": "MCQ",
+        "options": ["2", "3", "4", "5"],
+        "answer": "3",
+        "difficulty": "easy",
+        "source_chunk_id": "SRC_001_CH_01"
+      }
+    ]
+  },
+  "POST /submit-answer": {
+    "is_correct": true,
+    "correct_answer": "3",
+    "updated_difficulty": "easy"
+  },
+  "GET /student/S001/difficulty": {
+    "student_id": "S001",
+    "current_difficulty": "medium",
+    "correct_streak": 1,
+    "incorrect_streak": 0,
+    "updatedAt": "2024-01-15T10:30:00.000Z"
+  }
+}

@@ -1,0 +1,29 @@
+[
+  {
+    "question_id": "Q_1700000000000_ABCDE",
+    "question": "How many sides does a triangle have?",
+    "type": "MCQ",
+    "options": ["2", "3", "4", "5"],
+    "answer": "3",
+    "difficulty": "easy",
+    "source_chunk_id": "SRC_001_CH_01"
+  },
+  {
+    "question_id": "Q_1700000000001_FGHIJ",
+    "question": "The sum of all angles in a triangle is 180 degrees.",
+    "type": "TrueFalse",
+    "options": ["True", "False"],
+    "answer": "True",
+    "difficulty": "medium",
+    "source_chunk_id": "SRC_001_CH_01"
+  },
+  {
+    "question_id": "Q_1700000000002_KLMNO",
+    "question": "A ___ has three sides and three angles.",
+    "type": "FillBlank",
+    "options": [],
+    "answer": "triangle",
+    "difficulty": "easy",
+    "source_chunk_id": "SRC_001_CH_01"
+  }
+]
