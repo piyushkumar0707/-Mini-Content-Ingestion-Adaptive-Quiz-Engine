@@ -12,6 +12,7 @@ app.use('/generate-quiz', require('./src/routes/quiz'));
 app.use('/quiz', require('./src/routes/quizRetrieval'));
 app.use('/submit-answer', require('./src/routes/answer'));
 app.use('/student', require('./src/routes/student'));
+app.use('/stats', require('./src/routes/stats'));
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 

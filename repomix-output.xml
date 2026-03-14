@@ -43,6 +43,7 @@ The content is organized as follows:
 .env.example
 .gitignore
 package.json
+postman_collection.json
 README.md
 samples/sample_api_response.json
 samples/sample_chunk.json
@@ -72,6 +73,396 @@ src/utils/helpers.js
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="postman_collection.json">
+{
+  "info": {
+    "name": "Peblo AI — Quiz Context Engine",
+    "description": "A Node.js + Express + MongoDB backend that ingests educational PDFs, generates quiz questions via Groq LLM, and serves them with adaptive difficulty based on student performance.\n\n**Setup:**\n1. Start MongoDB locally\n2. Set `GROQ_API_KEY` in `.env`\n3. Run `npm start`\n4. Base URL: `http://localhost:3000`\n\n**Flow:**\n`POST /ingest` → `POST /generate-quiz` → `GET /quiz` → `POST /submit-answer` → `GET /student/:id/difficulty`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "source_id",
+      "value": "SRC_1700000000000_ABCD",
+      "type": "string",
+      "description": "Set this after running POST /ingest"
+    },
+    {
+      "key": "question_id",
+      "value": "Q_1700000000000_ABCDE",
+      "type": "string",
+      "description": "Set this after running GET /quiz"
+    },
+    {
+      "key": "student_id",
+      "value": "S001",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Verify the server is running and connected to MongoDB."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"ok\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Content Ingestion",
+      "item": [
+        {
+          "name": "POST /ingest",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["ingest"]
+            },
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "description": "PDF file to ingest (max 20MB)"
+                },
+                {
+                  "key": "grade",
+                  "value": "1",
+                  "type": "text",
+                  "description": "Grade level — integer between 1 and 12"
+                },
+                {
+                  "key": "subject",
+                  "value": "Math",
+                  "type": "text",
+                  "description": "Subject name (e.g. Math, English, Science)"
+                },
+                {
+                  "key": "topic",
+                  "value": "Shapes",
+                  "type": "text",
+                  "description": "Topic name (e.g. Shapes, Grammar, Plants)"
+                }
+              ]
+            },
+            "description": "Upload a PDF to extract text, chunk it, and store it in MongoDB.\n\n**After running:** Copy the `source_id` from the response and set it as the `source_id` collection variable."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"source_id\": \"SRC_1700000000000_ABCD\",\n  \"title\": \"peblo_pdf_grade1_math_numbers.pdf\",\n  \"chunks_saved\": 14,\n  \"chunks_discarded\": 3\n}"
+            },
+            {
+              "name": "400 No file uploaded",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"No PDF file uploaded\"\n}"
+            },
+            {
+              "name": "400 Invalid grade",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"grade must be an integer between 1 and 12\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Quiz Generation",
+      "item": [
+        {
+          "name": "POST /generate-quiz",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/generate-quiz",
+              "host": ["{{base_url}}"],
+              "path": ["generate-quiz"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_id\": \"{{source_id}}\"\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "description": "Generate MCQ, True/False, and Fill-in-the-blank questions for all chunks of a source document using the Groq LLM.\n\n- Chunks are processed in **batches of 3** to avoid rate limits\n- Duplicate questions are skipped (compound unique index)\n- Questions with < 10 character text are discarded\n- MCQ questions must have exactly 4 options with answer matching one of them\n- Calling this twice for the same `source_id` returns cached results instantly (`from_cache: true`)"
+          },
+          "response": [
+            {
+              "name": "200 Generated",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"source_id\": \"SRC_1700000000000_ABCD\",\n  \"questions_generated\": 42,\n  \"duplicates_skipped\": 0,\n  \"from_cache\": false\n}"
+            },
+            {
+              "name": "200 From Cache",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"source_id\": \"SRC_1700000000000_ABCD\",\n  \"questions_generated\": 42,\n  \"duplicates_skipped\": 0,\n  \"from_cache\": true\n}"
+            },
+            {
+              "name": "404 Source not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"No chunks found for source_id: SRC_INVALID\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Quiz Retrieval",
+      "item": [
+        {
+          "name": "GET /quiz — all questions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/quiz",
+              "host": ["{{base_url}}"],
+              "path": ["quiz"]
+            },
+            "description": "Returns up to 10 questions (default limit) with no filters."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"count\": 2,\n  \"questions\": [\n    {\n      \"question_id\": \"Q_1700000000000_ABCDE\",\n      \"question\": \"How many sides does a triangle have?\",\n      \"type\": \"MCQ\",\n      \"options\": [\"2\", \"3\", \"4\", \"5\"],\n      \"answer\": \"3\",\n      \"difficulty\": \"easy\",\n      \"source_chunk_id\": \"SRC_1700000000000_ABCD_CH_01\",\n      \"topic\": \"Shapes\",\n      \"subject\": \"Math\",\n      \"grade\": 1\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /quiz — filter by difficulty",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/quiz?difficulty=easy&limit=5",
+              "host": ["{{base_url}}"],
+              "path": ["quiz"],
+              "query": [
+                { "key": "difficulty", "value": "easy", "description": "easy | medium | hard" },
+                { "key": "limit", "value": "5", "description": "Max results (default: 10, max: 100)" }
+              ]
+            },
+            "description": "Filter by difficulty level."
+          }
+        },
+        {
+          "name": "GET /quiz — filter by topic",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/quiz?topic=Shapes",
+              "host": ["{{base_url}}"],
+              "path": ["quiz"],
+              "query": [
+                { "key": "topic", "value": "Shapes", "description": "Case-insensitive regex match" }
+              ]
+            },
+            "description": "Filter by topic (case-insensitive, partial match)."
+          }
+        },
+        {
+          "name": "GET /quiz — filter by topic + difficulty",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/quiz?topic=Shapes&difficulty=easy&limit=5",
+              "host": ["{{base_url}}"],
+              "path": ["quiz"],
+              "query": [
+                { "key": "topic", "value": "Shapes" },
+                { "key": "difficulty", "value": "easy" },
+                { "key": "limit", "value": "5" }
+              ]
+            },
+            "description": "Combine topic and difficulty filters."
+          }
+        },
+        {
+          "name": "GET /quiz — auto difficulty from student session",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/quiz?student_id={{student_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["quiz"],
+              "query": [
+                { "key": "student_id", "value": "{{student_id}}", "description": "Auto-uses student's current difficulty from StudentSession" }
+              ]
+            },
+            "description": "Pass `student_id` to automatically serve questions at the student's current adaptive difficulty level. If both `student_id` and `difficulty` are provided, explicit `difficulty` takes precedence."
+          }
+        },
+        {
+          "name": "GET /quiz — 400 invalid difficulty",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/quiz?difficulty=extreme",
+              "host": ["{{base_url}}"],
+              "path": ["quiz"],
+              "query": [
+                { "key": "difficulty", "value": "extreme" }
+              ]
+            },
+            "description": "Should return 400 validation error."
+          },
+          "response": [
+            {
+              "name": "400 Bad Request",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"difficulty must be easy, medium, or hard\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Answer Submission",
+      "item": [
+        {
+          "name": "POST /submit-answer — correct",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/submit-answer",
+              "host": ["{{base_url}}"],
+              "path": ["submit-answer"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"student_id\": \"{{student_id}}\",\n  \"question_id\": \"{{question_id}}\",\n  \"selected_answer\": \"3\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Submit a student answer. The system evaluates correctness (case-insensitive), saves the attempt, and updates the student's adaptive difficulty session.\n\n**Adaptive logic:**\n- 3 correct in a row → difficulty increases\n- 2 wrong in a row → difficulty decreases"
+          },
+          "response": [
+            {
+              "name": "200 Correct Answer",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"is_correct\": true,\n  \"correct_answer\": \"3\",\n  \"updated_difficulty\": \"easy\"\n}"
+            },
+            {
+              "name": "200 Wrong Answer",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"is_correct\": false,\n  \"correct_answer\": \"3\",\n  \"updated_difficulty\": \"easy\"\n}"
+            },
+            {
+              "name": "404 Question not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"Question not found: Q_INVALID\"\n}"
+            },
+            {
+              "name": "400 Missing fields",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"student_id is required, question_id is required\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /submit-answer — wrong answer",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/submit-answer",
+              "host": ["{{base_url}}"],
+              "path": ["submit-answer"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"student_id\": \"{{student_id}}\",\n  \"question_id\": \"{{question_id}}\",\n  \"selected_answer\": \"WRONG_ANSWER\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Submit an intentionally wrong answer to test adaptive difficulty decrease."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Adaptive Difficulty",
+      "item": [
+        {
+          "name": "GET /student/:id/difficulty",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/student/{{student_id}}/difficulty",
+              "host": ["{{base_url}}"],
+              "path": ["student", "{{student_id}}", "difficulty"]
+            },
+            "description": "Returns the student's current difficulty level and streak counters.\n\n**Difficulty rules:**\n- Starts at `easy` on first answer\n- 3 correct in a row → increases: `easy → medium → hard`\n- 2 wrong in a row → decreases: `hard → medium → easy`"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"student_id\": \"S001\",\n  \"current_difficulty\": \"medium\",\n  \"correct_streak\": 2,\n  \"incorrect_streak\": 0,\n  \"updatedAt\": \"2024-01-15T10:30:00.000Z\"\n}"
+            },
+            {
+              "name": "404 Student not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"Student session not found\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+</file>
 
 <file path=".env.example">
 PORT=3000
@@ -223,61 +614,6 @@ async function submitAnswer(req, res, next) {
 }
 
 module.exports = { submitAnswer };
-</file>
-
-<file path="src/controllers/ingestController.js">
-const SourceDocument = require('../models/SourceDocument');
-const ContentChunk = require('../models/ContentChunk');
-const { extractAndChunk } = require('../services/pdfService');
-const { generateSourceId, generateChunkId } = require('../utils/helpers');
-
-async function ingest(req, res, next) {
-  try {
-    if (!req.file) {
-      const err = new Error('No PDF file uploaded');
-      err.status = 400;
-      return next(err);
-    }
-
-    const { grade, subject, topic } = req.body;
-    const sourceId = generateSourceId();
-
-    // Extract and chunk the PDF
-    const { chunks, discarded } = await extractAndChunk(req.file.buffer);
-
-    // Save source document
-    const sourceDoc = await SourceDocument.create({
-      source_id: sourceId,
-      title: req.file.originalname,
-      subject,
-      grade: Number(grade),
-      topic
-    });
-
-    // Save all chunks
-    const chunkDocs = chunks.map((text, i) => ({
-      chunk_id: generateChunkId(sourceId, i),
-      source_id: sourceId,
-      text,
-      subject,
-      grade: Number(grade),
-      topic
-    }));
-
-    await ContentChunk.insertMany(chunkDocs);
-
-    res.status(201).json({
-      source_id: sourceId,
-      title: req.file.originalname,
-      chunks_saved: chunks.length,
-      chunks_discarded: discarded
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-
-module.exports = { ingest };
 </file>
 
 <file path="src/controllers/studentController.js">
@@ -514,20 +850,6 @@ async function extractAndChunk(buffer) {
 module.exports = { extractAndChunk };
 </file>
 
-<file path=".gitignore">
-node_modules/
-.env
-uploads/
-*.log
-
-
-
-TODO.md
-ROADMAP.md
-Peblo AI Backend Engineer Challenge.md
-ISSUES.md
-</file>
-
 <file path="package.json">
 {
   "name": "quiz-context-engine",
@@ -556,6 +878,209 @@ ISSUES.md
     "repomix": "^1.12.0"
   }
 }
+</file>
+
+<file path="src/controllers/ingestController.js">
+const SourceDocument = require('../models/SourceDocument');
+const ContentChunk = require('../models/ContentChunk');
+const { extractAndChunk } = require('../services/pdfService');
+const { generateSourceId, generateChunkId } = require('../utils/helpers');
+
+async function ingest(req, res, next) {
+  try {
+    if (!req.file) {
+      const err = new Error('No PDF file uploaded');
+      err.status = 400;
+      return next(err);
+    }
+
+    const { grade, subject, topic } = req.body;
+    const sourceId = generateSourceId();
+
+    // Extract and chunk the PDF
+    const { chunks, discarded } = await extractAndChunk(req.file.buffer);
+
+    // Save source document
+    await SourceDocument.create({
+      source_id: sourceId,
+      title: req.file.originalname,
+      subject,
+      grade: Number(grade),
+      topic
+    });
+
+    // Save all chunks
+    const chunkDocs = chunks.map((text, i) => ({
+      chunk_id: generateChunkId(sourceId, i),
+      source_id: sourceId,
+      text,
+      subject,
+      grade: Number(grade),
+      topic
+    }));
+
+    await ContentChunk.insertMany(chunkDocs);
+
+    res.status(201).json({
+      source_id: sourceId,
+      title: req.file.originalname,
+      chunks_saved: chunks.length,
+      chunks_discarded: discarded
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { ingest };
+</file>
+
+<file path="src/controllers/quizRetrievalController.js">
+const QuizQuestion = require('../models/QuizQuestion');
+const StudentSession = require('../models/StudentSession');
+
+async function getQuiz(req, res, next) {
+  try {
+    const { topic, difficulty, student_id, limit } = req.query;
+    const filter = {};
+
+    // Resolve difficulty: explicit param wins over student session
+    let resolvedDifficulty = difficulty;
+    if (!resolvedDifficulty && student_id) {
+      const session = await StudentSession.findOne({ student_id });
+      if (session) resolvedDifficulty = session.current_difficulty;
+    }
+
+    if (resolvedDifficulty) filter.difficulty = resolvedDifficulty;
+
+    // ISSUE-05: topic is now stored directly on QuizQuestion — single query, no join
+    if (topic) {
+      filter.topic = { $regex: topic, $options: 'i' };
+    }
+
+    const maxResults = Math.min(parseInt(limit) || 10, 100);
+    const questions = await QuizQuestion.find(filter).limit(maxResults);
+
+    // ISSUE-07: empty results = 200 with empty array, not 404
+    if (!questions.length) {
+      return res.json({ count: 0, questions: [] });
+    }
+
+    res.json({ count: questions.length, questions });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getQuiz };
+</file>
+
+<file path="src/models/QuizQuestion.js">
+const mongoose = require('mongoose');
+const schema = new mongoose.Schema({
+  question_id: { type: String, required: true, unique: true },
+  question: { type: String, required: true },
+  type: { type: String, enum: ['MCQ', 'TrueFalse', 'FillBlank'], required: true },
+  options: [String],
+  answer: { type: String, required: true },
+  difficulty: { type: String, enum: ['easy', 'medium', 'hard'], default: 'easy' },
+  source_chunk_id: String,
+  topic: String,
+  subject: String,
+  grade: Number
+});
+
+// Compound unique index — prevents duplicate questions per chunk (ISSUE-02)
+schema.index({ question: 1, source_chunk_id: 1 }, { unique: true });
+
+module.exports = mongoose.model('QuizQuestion', schema);
+</file>
+
+<file path="src/services/llmService.js">
+const Groq = require('groq-sdk');
+
+const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+const SYSTEM_PROMPT = `You are an expert educational quiz creator. Given a passage of educational content, generate quiz questions for students.
+
+Return ONLY a valid JSON array. Each element must be one of these types:
+
+MCQ:
+{ "question": "...", "type": "MCQ", "options": ["A","B","C","D"], "answer": "A", "difficulty": "easy|medium|hard" }
+
+True/False:
+{ "question": "...", "type": "TrueFalse", "options": ["True","False"], "answer": "True|False", "difficulty": "easy|medium|hard" }
+
+Fill in the blank:
+{ "question": "The ___ has three sides.", "type": "FillBlank", "options": [], "answer": "triangle", "difficulty": "easy|medium|hard" }
+
+Rules:
+- Generate at least 1 of each type per passage (3 questions minimum).
+- difficulty must be one of: easy, medium, hard
+- answer must exactly match one of the options (for MCQ/TrueFalse) or be the missing word (for FillBlank)
+- Return ONLY the JSON array, no explanation, no markdown fences.`;
+
+async function generateQuestionsForChunk(chunkText) {
+  try {
+    const response = await client.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: `Generate quiz questions from this educational content:\n\n${chunkText}` }
+      ],
+      temperature: 0.7,
+      max_tokens: 1500
+    });
+
+    const raw = response.choices[0].message.content.trim();
+
+    try {
+      // Strip markdown code fences if LLM adds them anyway
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+      return JSON.parse(cleaned);
+    } catch (e) {
+      console.error('[llmService] Failed to parse LLM response as JSON:', raw.slice(0, 200));
+      return [];
+    }
+  } catch (err) {
+    // ISSUE-06: catch API failures (rate limit, downtime) so other chunks still process
+    console.error('[llmService] API call failed:', err.message);
+    return [];
+  }
+}
+
+module.exports = { generateQuestionsForChunk };
+</file>
+
+<file path="src/utils/helpers.js">
+function generateSourceId() {
+  return `SRC_${Date.now()}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+}
+
+function generateChunkId(sourceId, index) {
+  return `${sourceId}_CH_${String(index + 1).padStart(2, '0')}`;
+}
+
+function generateQuestionId() {
+  return `Q_${Date.now()}_${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+}
+
+module.exports = { generateSourceId, generateChunkId, generateQuestionId };
+</file>
+
+<file path=".gitignore">
+node_modules/
+.env
+uploads/
+*.log
+
+
+
+TODO.md
+ROADMAP.md
+Peblo AI Backend Engineer Challenge.md
+ISSUES.md
+repomix-output.xml
 </file>
 
 <file path="README.md">
@@ -992,141 +1517,6 @@ curl http://localhost:3000/health
 See `.env.example` for the template. **Never commit your `.env` file.**
 </file>
 
-<file path="src/controllers/quizGenerationController.js">
-const ContentChunk = require('../models/ContentChunk');
-const QuizQuestion = require('../models/QuizQuestion');
-const { generateQuestionsForChunk } = require('../services/llmService');
-const { generateQuestionId } = require('../utils/helpers');
-
-async function generateQuiz(req, res, next) {
-  try {
-    const { source_id } = req.body;
-    const chunks = await ContentChunk.find({ source_id });
-
-    if (!chunks.length) {
-      const err = new Error(`No chunks found for source_id: ${source_id}`);
-      err.status = 404;
-      return next(err);
-    }
-
-    // ISSUE-03: fire all LLM calls in parallel instead of sequentially
-    const results = await Promise.all(
-      chunks.map(chunk =>
-        generateQuestionsForChunk(chunk.text)
-          .then(questions => ({ chunk, questions }))
-          .catch(() => ({ chunk, questions: [] }))
-      )
-    );
-
-    let totalGenerated = 0;
-    let totalDuplicates = 0;
-
-    for (const { chunk, questions } of results) {
-      const valid = questions
-        .filter(q => q.question && q.type && q.answer)
-        .map(q => ({
-          question_id: generateQuestionId(),
-          question: q.question,
-          type: q.type,
-          options: q.options || [],
-          answer: q.answer,
-          difficulty: q.difficulty || 'easy',
-          source_chunk_id: chunk.chunk_id,
-          // ISSUE-05: denormalize chunk metadata onto each question
-          topic: chunk.topic,
-          subject: chunk.subject,
-          grade: chunk.grade
-        }));
-
-      if (!valid.length) continue;
-
-      // ISSUE-02: bulk insert; unique index handles deduplication natively
-      try {
-        const inserted = await QuizQuestion.insertMany(valid, { ordered: false });
-        totalGenerated += inserted.length;
-        totalDuplicates += valid.length - inserted.length;
-      } catch (err) {
-        if (err.code === 11000) {
-          // Some were duplicates — count what actually inserted
-          const insertedCount = err.insertedDocs?.length || 0;
-          totalGenerated += insertedCount;
-          totalDuplicates += valid.length - insertedCount;
-        } else {
-          throw err;
-        }
-      }
-    }
-
-    res.json({ source_id, questions_generated: totalGenerated, duplicates_skipped: totalDuplicates });
-  } catch (err) {
-    next(err);
-  }
-}
-
-module.exports = { generateQuiz };
-</file>
-
-<file path="src/controllers/quizRetrievalController.js">
-const QuizQuestion = require('../models/QuizQuestion');
-const StudentSession = require('../models/StudentSession');
-
-async function getQuiz(req, res, next) {
-  try {
-    const { topic, difficulty, student_id, limit } = req.query;
-    const filter = {};
-
-    // Resolve difficulty: explicit param wins over student session
-    let resolvedDifficulty = difficulty;
-    if (!resolvedDifficulty && student_id) {
-      const session = await StudentSession.findOne({ student_id });
-      if (session) resolvedDifficulty = session.current_difficulty;
-    }
-
-    if (resolvedDifficulty) filter.difficulty = resolvedDifficulty;
-
-    // ISSUE-05: topic is now stored directly on QuizQuestion — single query, no join
-    if (topic) {
-      filter.topic = { $regex: topic, $options: 'i' };
-    }
-
-    const maxResults = Math.min(parseInt(limit) || 10, 100);
-    const questions = await QuizQuestion.find(filter).limit(maxResults);
-
-    // ISSUE-07: empty results = 200 with empty array, not 404
-    if (!questions.length) {
-      return res.json({ count: 0, questions: [] });
-    }
-
-    res.json({ count: questions.length, questions });
-  } catch (err) {
-    next(err);
-  }
-}
-
-module.exports = { getQuiz };
-</file>
-
-<file path="src/models/QuizQuestion.js">
-const mongoose = require('mongoose');
-const schema = new mongoose.Schema({
-  question_id: { type: String, required: true, unique: true },
-  question: { type: String, required: true },
-  type: { type: String, enum: ['MCQ', 'TrueFalse', 'FillBlank'], required: true },
-  options: [String],
-  answer: { type: String, required: true },
-  difficulty: { type: String, enum: ['easy', 'medium', 'hard'], default: 'easy' },
-  source_chunk_id: String,
-  topic: String,
-  subject: String,
-  grade: Number
-});
-
-// Compound unique index — prevents duplicate questions per chunk (ISSUE-02)
-schema.index({ question: 1, source_chunk_id: 1 }, { unique: true });
-
-module.exports = mongoose.model('QuizQuestion', schema);
-</file>
-
 <file path="src/routes/ingest.js">
 const router = require('express').Router();
 const multer = require('multer');
@@ -1136,6 +1526,7 @@ const { ingest } = require('../controllers/ingestController');
 
 const upload = multer({
   storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB max
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf') cb(null, true);
     else cb(new Error('Only PDF files are accepted'));
@@ -1151,76 +1542,107 @@ router.post('/', upload.single('file'), [
 module.exports = router;
 </file>
 
-<file path="src/services/llmService.js">
-const Groq = require('groq-sdk');
+<file path="src/controllers/quizGenerationController.js">
+const ContentChunk = require('../models/ContentChunk');
+const QuizQuestion = require('../models/QuizQuestion');
+const { generateQuestionsForChunk } = require('../services/llmService');
+const { generateQuestionId } = require('../utils/helpers');
 
-const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// In-memory cache of source_ids that have already been processed
+const generatedCache = new Set();
 
-const SYSTEM_PROMPT = `You are an expert educational quiz creator. Given a passage of educational content, generate quiz questions for students.
-
-Return ONLY a valid JSON array. Each element must be one of these types:
-
-MCQ:
-{ "question": "...", "type": "MCQ", "options": ["A","B","C","D"], "answer": "A", "difficulty": "easy|medium|hard" }
-
-True/False:
-{ "question": "...", "type": "TrueFalse", "options": ["True","False"], "answer": "True|False", "difficulty": "easy|medium|hard" }
-
-Fill in the blank:
-{ "question": "The ___ has three sides.", "type": "FillBlank", "options": [], "answer": "triangle", "difficulty": "easy|medium|hard" }
-
-Rules:
-- Generate at least 1 of each type per passage (3 questions minimum).
-- difficulty must be one of: easy, medium, hard
-- answer must exactly match one of the options (for MCQ/TrueFalse) or be the missing word (for FillBlank)
-- Return ONLY the JSON array, no explanation, no markdown fences.`;
-
-async function generateQuestionsForChunk(chunkText) {
+async function generateQuiz(req, res, next) {
   try {
-    const response = await client.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `Generate quiz questions from this educational content:\n\n${chunkText}` }
-      ],
-      temperature: 0.7,
-      max_tokens: 1500
-    });
+    const { source_id } = req.body;
 
-    const raw = response.choices[0].message.content.trim();
-
-    try {
-      // Strip markdown code fences if LLM adds them anyway
-      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-      return JSON.parse(cleaned);
-    } catch (e) {
-      console.error('[llmService] Failed to parse LLM response as JSON:', raw.slice(0, 200));
-      return [];
+    // Cache hit: skip LLM, return existing question count from DB
+    if (generatedCache.has(source_id)) {
+      const count = await QuizQuestion.countDocuments({ source_chunk_id: { $regex: `^${source_id}` } });
+      return res.json({ source_id, questions_generated: count, duplicates_skipped: 0, from_cache: true });
     }
+
+    const chunks = await ContentChunk.find({ source_id });
+
+    if (!chunks.length) {
+      const err = new Error(`No chunks found for source_id: ${source_id}`);
+      err.status = 404;
+      return next(err);
+    }
+
+    // Process chunks in batches of 3 to avoid Groq rate limits
+    const BATCH_SIZE = 3;
+    const results = [];
+    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+      const batch = chunks.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(chunk =>
+          generateQuestionsForChunk(chunk.text)
+            .then(questions => ({ chunk, questions }))
+            .catch(() => ({ chunk, questions: [] }))
+        )
+      );
+      results.push(...batchResults);
+    }
+
+    let totalGenerated = 0;
+    let totalDuplicates = 0;
+
+    for (const { chunk, questions } of results) {
+      const valid = questions
+        .filter(q => {
+          if (!q.question || !q.type || !q.answer) return false;
+          if (q.question.length < 10) return false;
+          // MCQ must have exactly 4 options and answer must be one of them
+          if (q.type === 'MCQ') {
+            if (!Array.isArray(q.options) || q.options.length !== 4) return false;
+            if (!q.options.includes(q.answer)) return false;
+          }
+          // TrueFalse answer must be "True" or "False"
+          if (q.type === 'TrueFalse') {
+            if (!['True', 'False'].includes(q.answer)) return false;
+          }
+          return true;
+        })
+        .map(q => ({
+          question_id: generateQuestionId(),
+          question: q.question,
+          type: q.type,
+          options: q.options || [],
+          answer: q.answer,
+          difficulty: q.difficulty || 'easy',
+          source_chunk_id: chunk.chunk_id,
+          topic: chunk.topic,
+          subject: chunk.subject,
+          grade: chunk.grade
+        }));
+
+      if (!valid.length) continue;
+
+      try {
+        const inserted = await QuizQuestion.insertMany(valid, { ordered: false });
+        totalGenerated += inserted.length;
+        totalDuplicates += valid.length - inserted.length;
+      } catch (err) {
+        if (err.code === 11000) {
+          const insertedCount = err.insertedDocs?.length || 0;
+          totalGenerated += insertedCount;
+          totalDuplicates += valid.length - insertedCount;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    // Mark this source_id as processed
+    generatedCache.add(source_id);
+
+    res.json({ source_id, questions_generated: totalGenerated, duplicates_skipped: totalDuplicates, from_cache: false });
   } catch (err) {
-    // ISSUE-06: catch API failures (rate limit, downtime) so other chunks still process
-    console.error('[llmService] API call failed:', err.message);
-    return [];
+    next(err);
   }
 }
 
-module.exports = { generateQuestionsForChunk };
-</file>
-
-<file path="src/utils/helpers.js">
-function generateSourceId() {
-  return `SRC_${Date.now()}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-}
-
-function generateChunkId(sourceId, index) {
-  return `${sourceId}_CH_${String(index + 1).padStart(2, '0')}`;
-}
-
-function generateQuestionId() {
-  return `Q_${Date.now()}_${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
-}
-
-module.exports = { generateSourceId, generateChunkId, generateQuestionId };
+module.exports = { generateQuiz };
 </file>
 
 </files>

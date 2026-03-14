@@ -1,0 +1,387 @@
+{
+  "info": {
+    "name": "Peblo AI — Quiz Context Engine",
+    "description": "A Node.js + Express + MongoDB backend that ingests educational PDFs, generates quiz questions via Groq LLM, and serves them with adaptive difficulty based on student performance.\n\n**Setup:**\n1. Start MongoDB locally\n2. Set `GROQ_API_KEY` in `.env`\n3. Run `npm start`\n4. Base URL: `http://localhost:3000`\n\n**Flow:**\n`POST /ingest` → `POST /generate-quiz` → `GET /quiz` → `POST /submit-answer` → `GET /student/:id/difficulty`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "source_id",
+      "value": "SRC_1700000000000_ABCD",
+      "type": "string",
+      "description": "Set this after running POST /ingest"
+    },
+    {
+      "key": "question_id",
+      "value": "Q_1700000000000_ABCDE",
+      "type": "string",
+      "description": "Set this after running GET /quiz"
+    },
+    {
+      "key": "student_id",
+      "value": "S001",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Verify the server is running and connected to MongoDB."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"ok\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Content Ingestion",
+      "item": [
+        {
+          "name": "POST /ingest",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["ingest"]
+            },
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "description": "PDF file to ingest (max 20MB)"
+                },
+                {
+                  "key": "grade",
+                  "value": "1",
+                  "type": "text",
+                  "description": "Grade level — integer between 1 and 12"
+                },
+                {
+                  "key": "subject",
+                  "value": "Math",
+                  "type": "text",
+                  "description": "Subject name (e.g. Math, English, Science)"
+                },
+                {
+                  "key": "topic",
+                  "value": "Shapes",
+                  "type": "text",
+                  "description": "Topic name (e.g. Shapes, Grammar, Plants)"
+                }
+              ]
+            },
+            "description": "Upload a PDF to extract text, chunk it, and store it in MongoDB.\n\n**After running:** Copy the `source_id` from the response and set it as the `source_id` collection variable."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"source_id\": \"SRC_1700000000000_ABCD\",\n  \"title\": \"peblo_pdf_grade1_math_numbers.pdf\",\n  \"chunks_saved\": 14,\n  \"chunks_discarded\": 3\n}"
+            },
+            {
+              "name": "400 No file uploaded",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"No PDF file uploaded\"\n}"
+            },
+            {
+              "name": "400 Invalid grade",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"grade must be an integer between 1 and 12\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Quiz Generation",
+      "item": [
+        {
+          "name": "POST /generate-quiz",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/generate-quiz",
+              "host": ["{{base_url}}"],
+              "path": ["generate-quiz"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_id\": \"{{source_id}}\"\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "description": "Generate MCQ, True/False, and Fill-in-the-blank questions for all chunks of a source document using the Groq LLM.\n\n- Chunks are processed in **batches of 3** to avoid rate limits\n- Duplicate questions are skipped (compound unique index)\n- Questions with < 10 character text are discarded\n- MCQ questions must have exactly 4 options with answer matching one of them\n- Calling this twice for the same `source_id` returns cached results instantly (`from_cache: true`)"
+          },
+          "response": [
+            {
+              "name": "200 Generated",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"source_id\": \"SRC_1700000000000_ABCD\",\n  \"questions_generated\": 42,\n  \"duplicates_skipped\": 0,\n  \"from_cache\": false\n}"
+            },
+            {
+              "name": "200 From Cache",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"source_id\": \"SRC_1700000000000_ABCD\",\n  \"questions_generated\": 42,\n  \"duplicates_skipped\": 0,\n  \"from_cache\": true\n}"
+            },
+            {
+              "name": "404 Source not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"No chunks found for source_id: SRC_INVALID\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Quiz Retrieval",
+      "item": [
+        {
+          "name": "GET /quiz — all questions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/quiz",
+              "host": ["{{base_url}}"],
+              "path": ["quiz"]
+            },
+            "description": "Returns up to 10 questions (default limit) with no filters."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"count\": 2,\n  \"questions\": [\n    {\n      \"question_id\": \"Q_1700000000000_ABCDE\",\n      \"question\": \"How many sides does a triangle have?\",\n      \"type\": \"MCQ\",\n      \"options\": [\"2\", \"3\", \"4\", \"5\"],\n      \"answer\": \"3\",\n      \"difficulty\": \"easy\",\n      \"source_chunk_id\": \"SRC_1700000000000_ABCD_CH_01\",\n      \"topic\": \"Shapes\",\n      \"subject\": \"Math\",\n      \"grade\": 1\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /quiz — filter by difficulty",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/quiz?difficulty=easy&limit=5",
+              "host": ["{{base_url}}"],
+              "path": ["quiz"],
+              "query": [
+                { "key": "difficulty", "value": "easy", "description": "easy | medium | hard" },
+                { "key": "limit", "value": "5", "description": "Max results (default: 10, max: 100)" }
+              ]
+            },
+            "description": "Filter by difficulty level."
+          }
+        },
+        {
+          "name": "GET /quiz — filter by topic",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/quiz?topic=Shapes",
+              "host": ["{{base_url}}"],
+              "path": ["quiz"],
+              "query": [
+                { "key": "topic", "value": "Shapes", "description": "Case-insensitive regex match" }
+              ]
+            },
+            "description": "Filter by topic (case-insensitive, partial match)."
+          }
+        },
+        {
+          "name": "GET /quiz — filter by topic + difficulty",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/quiz?topic=Shapes&difficulty=easy&limit=5",
+              "host": ["{{base_url}}"],
+              "path": ["quiz"],
+              "query": [
+                { "key": "topic", "value": "Shapes" },
+                { "key": "difficulty", "value": "easy" },
+                { "key": "limit", "value": "5" }
+              ]
+            },
+            "description": "Combine topic and difficulty filters."
+          }
+        },
+        {
+          "name": "GET /quiz — auto difficulty from student session",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/quiz?student_id={{student_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["quiz"],
+              "query": [
+                { "key": "student_id", "value": "{{student_id}}", "description": "Auto-uses student's current difficulty from StudentSession" }
+              ]
+            },
+            "description": "Pass `student_id` to automatically serve questions at the student's current adaptive difficulty level. If both `student_id` and `difficulty` are provided, explicit `difficulty` takes precedence."
+          }
+        },
+        {
+          "name": "GET /quiz — 400 invalid difficulty",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/quiz?difficulty=extreme",
+              "host": ["{{base_url}}"],
+              "path": ["quiz"],
+              "query": [
+                { "key": "difficulty", "value": "extreme" }
+              ]
+            },
+            "description": "Should return 400 validation error."
+          },
+          "response": [
+            {
+              "name": "400 Bad Request",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"difficulty must be easy, medium, or hard\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Answer Submission",
+      "item": [
+        {
+          "name": "POST /submit-answer — correct",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/submit-answer",
+              "host": ["{{base_url}}"],
+              "path": ["submit-answer"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"student_id\": \"{{student_id}}\",\n  \"question_id\": \"{{question_id}}\",\n  \"selected_answer\": \"3\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Submit a student answer. The system evaluates correctness (case-insensitive), saves the attempt, and updates the student's adaptive difficulty session.\n\n**Adaptive logic:**\n- 3 correct in a row → difficulty increases\n- 2 wrong in a row → difficulty decreases"
+          },
+          "response": [
+            {
+              "name": "200 Correct Answer",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"is_correct\": true,\n  \"correct_answer\": \"3\",\n  \"updated_difficulty\": \"easy\"\n}"
+            },
+            {
+              "name": "200 Wrong Answer",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"is_correct\": false,\n  \"correct_answer\": \"3\",\n  \"updated_difficulty\": \"easy\"\n}"
+            },
+            {
+              "name": "404 Question not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"Question not found: Q_INVALID\"\n}"
+            },
+            {
+              "name": "400 Missing fields",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"error\": \"student_id is required, question_id is required\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /submit-answer — wrong answer",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/submit-answer",
+              "host": ["{{base_url}}"],
+              "path": ["submit-answer"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"student_id\": \"{{student_id}}\",\n  \"question_id\": \"{{question_id}}\",\n  \"selected_answer\": \"WRONG_ANSWER\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Submit an intentionally wrong answer to test adaptive difficulty decrease."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Adaptive Difficulty",
+      "item": [
+        {
+          "name": "GET /student/:id/difficulty",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/student/{{student_id}}/difficulty",
+              "host": ["{{base_url}}"],
+              "path": ["student", "{{student_id}}", "difficulty"]
+            },
+            "description": "Returns the student's current difficulty level and streak counters.\n\n**Difficulty rules:**\n- Starts at `easy` on first answer\n- 3 correct in a row → increases: `easy → medium → hard`\n- 2 wrong in a row → decreases: `hard → medium → easy`"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"student_id\": \"S001\",\n  \"current_difficulty\": \"medium\",\n  \"correct_streak\": 2,\n  \"incorrect_streak\": 0,\n  \"updatedAt\": \"2024-01-15T10:30:00.000Z\"\n}"
+            },
+            {
+              "name": "404 Student not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"error\": \"Student session not found\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
