@@ -3,9 +3,19 @@ const QuizQuestion = require('../models/QuizQuestion');
 const { generateQuestionsForChunk } = require('../services/llmService');
 const { generateQuestionId } = require('../utils/helpers');
 
+// In-memory cache of source_ids that have already been processed
+const generatedCache = new Set();
+
 async function generateQuiz(req, res, next) {
   try {
     const { source_id } = req.body;
+
+    // Cache hit: skip LLM, return existing question count from DB
+    if (generatedCache.has(source_id)) {
+      const count = await QuizQuestion.countDocuments({ source_chunk_id: { $regex: `^${source_id}` } });
+      return res.json({ source_id, questions_generated: count, duplicates_skipped: 0, from_cache: true });
+    }
+
     const chunks = await ContentChunk.find({ source_id });
 
     if (!chunks.length) {
@@ -43,7 +53,6 @@ async function generateQuiz(req, res, next) {
           answer: q.answer,
           difficulty: q.difficulty || 'easy',
           source_chunk_id: chunk.chunk_id,
-          // ISSUE-05: denormalize chunk metadata onto each question
           topic: chunk.topic,
           subject: chunk.subject,
           grade: chunk.grade
@@ -51,14 +60,12 @@ async function generateQuiz(req, res, next) {
 
       if (!valid.length) continue;
 
-      // ISSUE-02: bulk insert; unique index handles deduplication natively
       try {
         const inserted = await QuizQuestion.insertMany(valid, { ordered: false });
         totalGenerated += inserted.length;
         totalDuplicates += valid.length - inserted.length;
       } catch (err) {
         if (err.code === 11000) {
-          // Some were duplicates — count what actually inserted
           const insertedCount = err.insertedDocs?.length || 0;
           totalGenerated += insertedCount;
           totalDuplicates += valid.length - insertedCount;
@@ -68,7 +75,10 @@ async function generateQuiz(req, res, next) {
       }
     }
 
-    res.json({ source_id, questions_generated: totalGenerated, duplicates_skipped: totalDuplicates });
+    // Mark this source_id as processed
+    generatedCache.add(source_id);
+
+    res.json({ source_id, questions_generated: totalGenerated, duplicates_skipped: totalDuplicates, from_cache: false });
   } catch (err) {
     next(err);
   }
